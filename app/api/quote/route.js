@@ -1,11 +1,11 @@
-import fetch from "node-fetch";
+import { NextResponse } from "next/server";
 
 export async function POST(request) {
   try {
     const { imageBase64, notes } = await request.json();
 
     if (!imageBase64) {
-      return new Response(JSON.stringify({ error: "Missing imageBase64" }), { status: 400 });
+      return NextResponse.json({ error: "Missing imageBase64" }, { status: 400 });
     }
 
     const pricingRules = `
@@ -65,7 +65,7 @@ Formula:
 subtotal = stem total + $5 supply charge + decorations
 (no $5 charge for basket arrangements)
 
-Output only:
+Output:
 {
   "pre_tax_total": 123.45
 }
@@ -111,9 +111,9 @@ Return JSON with "pre_tax_total".
     const salesTax = Number((preTax * 0.0735).toFixed(2));
     const grandTotal = Number((preTax + salesTax).toFixed(2));
 
-    return Response.json({ preTax, salesTax, grandTotal });
+    return NextResponse.json({ preTax, salesTax, grandTotal });
 
   } catch (err) {
-    return new Response(JSON.stringify({ error: err.message }), { status: 500 });
+    return new NextResponse(JSON.stringify({ error: err.message }), { status: 500 });
   }
 }
