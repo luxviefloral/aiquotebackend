@@ -2,7 +2,9 @@ import { NextResponse } from "next/server";
 
 export async function POST(request) {
   try {
-    const { imageBase64, notes } = await request.json();
+    const bodyText = await request.text();
+const body = bodyText ? JSON.parse(bodyText) : {};
+const { imageBase64, notes } = body;
 
     if (!imageBase64) {
       return NextResponse.json({ error: "Missing imageBase64" }, { status: 400 });
