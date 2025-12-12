@@ -4,26 +4,8 @@ import { NextResponse } from "next/server";
 
 export async function POST(req: Request) {
   try {
-    const bodyText = await req.text();
-    const body = bodyText ? JSON.parse(bodyText) : {};
+    const body = await req.json();
     const { description = "", requests = "" } = body;
-
-    const prompt = `
-You are a florist pricing assistant.
-
-Bouquet description:
-${description}
-
-Customer requests:
-${requests}
-
-Return ONLY valid JSON in this exact format:
-{
-  "subtotal": number,
-  "tax": number,
-  "total": number
-}
-`;
 
     const openaiRes = await fetch("https://api.openai.com/v1/responses", {
       method: "POST",
@@ -33,13 +15,35 @@ Return ONLY valid JSON in this exact format:
       },
       body: JSON.stringify({
         model: "gpt-4o-mini",
-        input: prompt
+        response_format: { type: "json_object" },
+        input: [
+          {
+            role: "system",
+            content: "You are a florist pricing assistant. Always return valid JSON."
+          },
+          {
+            role: "user",
+            content: `
+Bouquet description:
+${description}
+
+Customer requests:
+${requests}
+
+Return JSON exactly like:
+{
+  "subtotal": number,
+  "tax": number,
+  "total": number
+}
+`
+          }
+        ]
       })
     });
 
     const data = await openaiRes.json();
-    const text = data?.output?.[0]?.content?.[0]?.text || "{}";
-    const result = JSON.parse(text);
+    const result = data.output_parsed;
 
     return NextResponse.json(result);
   } catch {
