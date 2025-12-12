@@ -3,7 +3,6 @@ import { NextResponse } from "next/server";
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { description = "", requests = "" } = body || {};
 
     const response = await fetch("https://api.openai.com/v1/responses", {
       method: "POST",
@@ -13,31 +12,19 @@ export async function POST(req: Request) {
       },
       body: JSON.stringify({
         model: "gpt-4o-mini",
-        input: `
-You are a florist pricing assistant.
-
-Bouquet description:
-${description}
-
-Customer requests:
-${requests}
-
-Return ONLY valid JSON in this format:
-{
-  "subtotal": number,
-  "tax": number,
-  "total": number
-}
-`
+        input: "Say hello in JSON like {\"ok\": true}"
       })
     });
 
     const data = await response.json();
-    const text = data.output[0].content[0].text;
-    const result = JSON.parse(text);
 
-    return NextResponse.json(result);
-  } catch (err) {
-    return NextResponse.json({ error: "Quote generation failed" }, { status: 500 });
+    return NextResponse.json({
+      openai_raw_response: data
+    });
+  } catch (err: any) {
+    return NextResponse.json(
+      { error: err.message },
+      { status: 500 }
+    );
   }
 }
