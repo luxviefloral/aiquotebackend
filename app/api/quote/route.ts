@@ -2,19 +2,9 @@ export const runtime = "nodejs";
 
 import { NextResponse } from "next/server";
 
-/**
- * PRICING RULES (FINAL)
- *
- * • Roses are rounded to nearest 25 (exception: flat bouquets may be 12)
- * • Total stems = rose stems + add-on stems
- * • Add-on stems are rounded to nearest 10
- * • Subtotal = stem_price × total_stems + total_stems
- * • Tax = Missouri 7.35%
- */
-
 const TAX_RATE = 0.0735;
 
-// Base stem pricing
+// Stem pricing tiers
 function getStemPrice(stemCount: number): number {
   if (stemCount <= 25) return 2.5;
   if (stemCount <= 50) return 2.25;
@@ -23,29 +13,22 @@ function getStemPrice(stemCount: number): number {
   return 1.85;
 }
 
-// Round helpers
 const roundTo25 = (n: number) => Math.round(n / 25) * 25;
 const roundTo10 = (n: number) => Math.round(n / 10) * 10;
 
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { image, notes = "" } = body;
+    const image = body.image;
 
     if (!image) {
       return NextResponse.json({ error: "Image required" }, { status: 400 });
     }
 
-    /**
-     * We are NOT letting the AI decide price.
-     * AI ONLY estimates stem counts.
-     */
+    const prompt = `
+From the bouquet image, estimate stem counts.
 
-    const analysisPrompt = `
-You are a florist assistant.
-From the bouquet image, estimate ONLY numeric values.
-
-Return JSON ONLY in this format:
+Return ONLY valid JSON:
 {
   "roseCount": number,
   "addonStemCount": number,
@@ -65,7 +48,7 @@ Return JSON ONLY in this format:
           {
             role: "user",
             content: [
-              { type: "input_text", text: analysisPrompt },
+              { type: "input_text", text: prompt },
               { type: "input_image", image_url: image },
             ],
           },
@@ -74,19 +57,27 @@ Return JSON ONLY in this format:
     });
 
     const aiData = await aiRes.json();
-    const text = aiData?.output?.[0]?.content?.[0]?.text;
-    if (!text) throw new Error("No AI output");
+    const rawText = aiData?.output?.[0]?.content?.[0]?.text;
 
-    const parsed = JSON.parse(text);
+    if (!rawText) {
+      throw new Error("AI returned no output");
+    }
 
-    let roseCount = Number(parsed.roseCount || 0);
-    let addonStems = Number(parsed.addonStemCount || 0);
+    let parsed;
+    try {
+      parsed = JSON.parse(rawText);
+    } catch {
+      throw new Error("AI returned invalid JSON");
+    }
+
+    let roseCount = Number(parsed.roseCount);
+    let addonStems = Number(parsed.addonStemCount);
     const isFlat = Boolean(parsed.flatBouquet);
 
-    // Apply rounding rules
-    if (roseCount === 12 && isFlat) {
-      // allowed
-    } else {
+    if (!Number.isFinite(roseCount)) roseCount = 25;
+    if (!Number.isFinite(addonStems)) addonStems = 0;
+
+    if (!(isFlat && roseCount === 12)) {
       roseCount = roundTo25(roseCount);
     }
 
@@ -96,13 +87,10 @@ Return JSON ONLY in this format:
     const stemPrice = getStemPrice(totalStems);
 
     const subtotal = totalStems * stemPrice + totalStems;
-    const tax = +(subtotal * TAX_RATE).toFixed(2);
-    const total = +(subtotal + tax).toFixed(2);
+    const tax = Number((subtotal * TAX_RATE).toFixed(2));
+    const total = Number((subtotal + tax).toFixed(2));
 
-    return NextResponse.json(
-      { subtotal, tax, total },
-      { status: 200 }
-    );
+    return NextResponse.json({ subtotal, tax, total }, { status: 200 });
   } catch (err) {
     return NextResponse.json(
       { error: "Quote generation failed" },
